@@ -198,3 +198,203 @@ public class GameManager : MonoBehaviour
         exitButton.SetActive(false);
         confirmationDialog.SetActive(false);
         exitConfirmationDialog.SetActive(false);
+        pauseMenu.SetActive(false);
+        mainMenuConfirmationDialog.SetActive(false);
+        leaderboardButtonObj.SetActive(true);
+        leaderboardPanel.SetActive(false);
+        leaderboardCloseButton.SetActive(false);
+        
+        // Clean up leaderboard entries
+        if (leaderboardContent != null)
+        {
+            while (leaderboardContent.transform.childCount > 0)
+            {
+                Transform child = leaderboardContent.transform.GetChild(0);
+                DestroyImmediate(child.gameObject);
+            }
+        }
+        
+        // Get clean score values
+        int currentScore = Mathf.FloorToInt(score);
+        int currentHigh = Mathf.FloorToInt(highScore);
+        
+        Debug.Log("SO SÁNH ĐIỂM: Score = " + currentScore + " | HighScore = " + currentHigh);
+        
+        // Compare and decide action
+        if (currentScore > currentHigh)
+        {
+            Debug.Log("Phá kỷ lục! Đang chờ nhập tên...");
+            highScore = score; // Update highScore
+            SaveHighScore();
+            AddToLeaderboard(score);
+            nameInputUI.SetActive(true); // Hiện bảng
+            // TUYỆT ĐỐI KHÔNG GỌI LỆNH AUTO-RELOAD Ở ĐÂY
+        }
+        else
+        {
+            Debug.Log("Không phá kỷ lục. Auto-reloading...");
+            AddToLeaderboard(score);
+            StartCoroutine(ReloadScene());
+        }
+    }
+    private IEnumerator ReloadScene()
+    {
+        yield return new WaitForSecondsRealtime(1f);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+    
+    private void LoadHighScore()
+    {
+        highScore = PlayerPrefs.GetFloat("HighScore", 0f);
+    }
+    
+    private void SaveHighScore()
+    {
+        PlayerPrefs.SetFloat("HighScore", highScore);
+        PlayerPrefs.Save();
+    }
+    
+    public void ResetHighScore()
+    {
+        PlayerPrefs.DeleteKey("HighScore");
+        highScore = 0f;
+        highScoreText.text = "Highscore: 0";
+    }
+    
+    public void ShowConfirmationDialog()
+    {
+        confirmationDialog.SetActive(true);
+        //resetButton.SetActive(false);
+        exitButton.SetActive(false);
+        //muteButton.SetActive(false);
+    }
+    
+    public void OnResetButtonClick()
+    {
+        ShowConfirmationDialog();
+    }
+    
+    public void OnExitButtonClick()
+    {
+        ShowExitConfirmationDialog();
+    }
+    
+    public void HideConfirmationDialog()
+    {
+        confirmationDialog.SetActive(false);
+        //resetButton.SetActive(true);
+        exitButton.SetActive(true);
+        //muteButton.SetActive(true);
+    }
+    
+    public void ConfirmResetHighScore()
+    {
+        ResetHighScore();
+        HideConfirmationDialog();
+    }
+    
+    public void CancelResetHighScore()
+    {
+        HideConfirmationDialog();
+    }
+    
+    public void ShowExitConfirmationDialog()
+    {
+        exitConfirmationDialog.SetActive(true);
+        //resetButton.SetActive(false);
+        exitButton.SetActive(false);
+        //muteButton.SetActive(false);
+    }
+    
+    public void HideExitConfirmationDialog()
+    {
+        exitConfirmationDialog.SetActive(false);
+        //resetButton.SetActive(true);
+        exitButton.SetActive(true);
+        //muteButton.SetActive(true);
+    }
+    
+    public void ConfirmExitGame()
+    {
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
+    
+    public void CancelExitGame()
+    {
+        HideExitConfirmationDialog();
+    }
+    
+    public void OnMuteButtonClick()
+    {
+        ToggleMute();
+    }
+    
+    private void ToggleMute()
+    {
+        isMuted = !isMuted;
+        AudioListener.volume = isMuted ? 0f : 1f;
+        SaveMuteState();
+        UpdateMuteButton();
+    }
+    
+    private void UpdateMuteButton()
+    {
+        if (muteButtonText != null)
+        {
+            muteButtonText.text = isMuted ? "Unmute" : "Mute";
+        }
+    }
+    
+    private void LoadMuteState()
+    {
+        isMuted = PlayerPrefs.GetInt("IsMuted", 0) == 1;
+        AudioListener.volume = isMuted ? 0f : 1f;
+    }
+    
+    private void SaveMuteState()
+    {
+        PlayerPrefs.SetInt("IsMuted", isMuted ? 1 : 0);
+        PlayerPrefs.Save();
+    }
+    
+    public void PauseGame()
+    {
+        isPaused = true;
+        Time.timeScale = 0f;
+        pauseMenu.SetActive(true);
+        titleGame.SetActive(true);
+        //muteButton.SetActive(true);
+    }
+    
+    public void ResumeGame()
+    {
+        isPaused = false;
+        Time.timeScale = 1f;
+        pauseMenu.SetActive(false);
+        titleGame.SetActive(false);
+        //muteButton.SetActive(false);
+    }
+    
+    public void OnResumeButtonClick()
+    {
+        ResumeGame();
+    }
+    
+    public void OnMainMenuButtonClick()
+    {
+        ShowMainMenuConfirmationDialog();
+    }
+    
+    public void ShowMainMenuConfirmationDialog()
+    {
+        mainMenuConfirmationDialog.SetActive(true);
+        pauseMenu.SetActive(false);
+    }
+    
+    public void HideMainMenuConfirmationDialog()
+    {
+        mainMenuConfirmationDialog.SetActive(false);
