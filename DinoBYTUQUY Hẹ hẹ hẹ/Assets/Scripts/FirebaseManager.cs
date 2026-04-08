@@ -54,3 +54,45 @@ public class FirebaseManager : MonoBehaviour
             }
         }
     }
+
+    // 2. TẢI VÀ SẮP XẾP BẢNG XẾP HẠNG
+    IEnumerator GetLeaderboard()
+    {
+        using (UnityWebRequest www = UnityWebRequest.Get(firebaseUrl))
+        {
+            yield return www.SendWebRequest();
+
+            if (www.result == UnityWebRequest.Result.Success)
+            {
+                string rawJson = www.downloadHandler.text;
+                
+                // Phép thuật Regex lọc lấy đúng Tên và Điểm từ đống lộn xộn
+                MatchCollection matches = Regex.Matches(rawJson, @"\""name\"":\""(.*?)\"".*?\""score\"":(\d+)");
+
+                List<PlayerScore> scoreList = new List<PlayerScore>();
+
+                foreach (Match match in matches)
+                {
+                    string n = match.Groups[1].Value;
+                    int s = int.Parse(match.Groups[2].Value);
+                    scoreList.Add(new PlayerScore { name = n, score = s });
+                }
+
+                // Sắp xếp điểm từ Cao xuống Thấp
+                scoreList = scoreList.OrderByDescending(x => x.score).ToList();
+
+                // Viết ra màn hình
+                string finalText = "🏆 TOP THỢ SĂN DINO 🏆\n\n";
+                for (int i = 0; i < scoreList.Count && i < 10; i++)
+                {
+                    finalText += (i + 1) + ". " + scoreList[i].name + " - " + scoreList[i].score + "\n";
+                }
+
+                if (leaderboardText != null)
+                {
+                    leaderboardText.text = finalText;
+                }
+            }
+        }
+    }
+}
