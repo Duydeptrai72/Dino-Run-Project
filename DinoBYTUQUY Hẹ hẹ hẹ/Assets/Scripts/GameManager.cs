@@ -598,3 +598,209 @@ public class GameManager : MonoBehaviour
         if (contentRect != null)
         {
             contentRect.sizeDelta = new Vector2(contentRect.sizeDelta.x, leaderboard.Count * 50);
+            }
+    }
+    
+    private void InitializeBackgrounds()
+    {
+        // Reset background switching variables
+        lastBackgroundSwitchScore = 0;
+        currentBackgroundIndex = 0;
+        
+        // Show Background1, hide Background2 at start
+        if (background1 != null && background2 != null)
+        {
+            background1.SetActive(true);
+            background2.SetActive(false);
+        }
+        else
+        {
+            Debug.LogError("Background objects not assigned in Inspector!");
+        }
+    }
+    
+    private void SwitchBackground()
+    {
+        if (background1 == null || background2 == null)
+        {
+            Debug.LogError("Background objects not assigned!");
+            return;
+        }
+        
+        // Toggle between backgrounds
+        if (currentBackgroundIndex == 0)
+        {
+            // Switch to Background2
+            background1.SetActive(false);
+            background2.SetActive(true);
+            currentBackgroundIndex = 1;
+            Debug.Log("Switched to Background2 at score: " + Mathf.FloorToInt(score));
+        }
+        else
+        {
+            // Switch to Background1
+            background1.SetActive(true);
+            background2.SetActive(false);
+            currentBackgroundIndex = 0;
+            Debug.Log("Switched to Background1 at score: " + Mathf.FloorToInt(score));
+        }
+    }
+    
+    /// <summary>
+    /// Sets a custom score for testing background switching
+    /// Call this method to test different score values and background changes
+    /// </summary>
+    /// <param name="customScore">The score value to set (e.g., 500, 1000, 1500)</param>
+    public void SetCustomScore(int customScore)
+    {
+        // Update score display
+        score = customScore;
+        speedText.text = "Score: " + Mathf.FloorToInt(score).ToString();
+        
+        // Calculate which background should be active based on 500-point intervals
+        int scoreThreshold = 500;
+        int expectedBackgroundIndex = (customScore / scoreThreshold) % 2;
+        
+        // Switch background if the expected background is different from current
+        if (expectedBackgroundIndex != currentBackgroundIndex)
+        {
+            SwitchBackground();
+            lastBackgroundSwitchScore = (customScore / scoreThreshold) * scoreThreshold;
+        }
+        
+        // Log the change for debugging
+        string backgroundName = expectedBackgroundIndex == 0 ? "Background1" : "Background2";
+        Debug.Log($"Custom score set to: {customScore}, Background: {backgroundName}");
+    }
+    
+    // Gửi điểm lên Firebase và load lại scene
+    public void BamNutGuiDiem()
+    {
+        // Gửi điểm lên Firebase
+        FindAnyObjectByType<FirebaseManager>().GameOver(Mathf.FloorToInt(score));
+        // Load lại Scene để chơi ván mới
+        UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+    }
+    
+    // Mở bảng xếp hạng để tải dữ liệu từ Firebase
+    public void OpenLeaderboard()
+    {
+        leaderboardPanel.SetActive(true);
+        if (leaderboardText != null)
+        {
+            leaderboardText.text = "Đang tải dữ liệu...";
+        }
+        StartCoroutine(FetchLeaderboard());
+    }
+    
+    // Đóng bảng xếp hạng
+    public void CloseLeaderboard()
+    {
+        leaderboardPanel.SetActive(false);
+    }
+    
+    // Tải dữ liệu bảng xếp hạng từ Firebase
+    private IEnumerator FetchLeaderboard()
+    {
+        // Thay URL này bằng Firebase URL của bạn
+        string firebaseUrl = "https://dinorun-463a4-default-rtdb.asia-southeast1.firebasedatabase.app/leaderboard.json";
+        
+        using (UnityWebRequest request = UnityWebRequest.Get(firebaseUrl))
+        {
+            yield return request.SendWebRequest();
+            
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string json = request.downloadHandler.text;
+                Debug.Log("Firebase Response: " + json);
+                
+                try
+                {
+                    // Tạo list để lưu các entry (tên - điểm)
+                    List<KeyValuePair<string, int>> scores = new List<KeyValuePair<string, int>>();
+                    
+                    // Sử dụng Regex để quét tất cả "name" và "score" trong JSON
+                    // Pattern này tìm: "name": "...", "score": ...
+                    string pattern = @"""name""\s*:\s*""([^""]*)""\s*,\s*""score""\s*:\s*(\d+)";
+                    
+                    MatchCollection matches = Regex.Matches(json, pattern);
+                    
+                    Debug.Log("Số lượng entry tìm được: " + matches.Count);
+                    
+                    // Duyệt qua tất cả match và lưu vào list
+                    foreach (Match match in matches)
+                    {
+                        if (match.Groups.Count >= 3)
+                        {
+                            string name = match.Groups[1].Value;
+                            string scoreStr = match.Groups[2].Value;
+                            
+                            if (int.TryParse(scoreStr, out int scoreValue))
+                            {
+                                scores.Add(new KeyValuePair<string, int>(name, scoreValue));
+                                Debug.Log("Tìm được: " + name + " - " + scoreValue);
+                            }
+                        }
+                    }
+                    
+                    // Sắp xếp từ cao xuống thấp
+                    scores.Sort((a, b) => b.Value.CompareTo(a.Value));
+                    
+                    // Lấy tối đa 10 người
+                    int topCount = Mathf.Min(scores.Count, 10);
+                    string leaderboardDisplay = "<size=120%><b>TOP CAO THỦ</b></size>\n\n";
+                    
+                    Debug.Log("TopCount: " + topCount);
+
+                    if (topCount == 0)
+                    {
+                        leaderboardDisplay = "Chưa có dữ liệu!";
+                    }
+                    else
+                    {
+                        // Tìm độ dài tên dài nhất để căn phải điểm số
+                        int maxNameLength = 0;
+                        for (int i = 0; i < topCount; i++)
+                        {
+                            if (scores[i].Key.Length > maxNameLength)
+                                maxNameLength = scores[i].Key.Length;
+                        }
+                        int padLength = maxNameLength + 2; // +2 cho đẹp
+                        
+                        // Cộng dồn tất cả các dòng INTO leaderboardDisplay
+                        for (int i = 0; i < topCount; i++)
+                        {
+                            string stt = (i + 1).ToString("D2");
+                            string name = scores[i].Key.ToUpper();
+                            // Căn phải điểm số bằng dấu chấm
+                            string line = stt + ". " + name.PadRight(padLength, '.') + " " + scores[i].Value;
+                            leaderboardDisplay += line + "\n";
+                        }
+                    }
+                    
+                    // Gán text CHỈ 1 LẦN duy nhất SAU khi vòng lặp hoàn thành
+                    if (leaderboardText != null)
+                    {
+                        leaderboardText.text = leaderboardDisplay;
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("Lỗi parse JSON: " + e.Message);
+                    if (leaderboardText != null)
+                    {
+                        leaderboardText.text = "Lỗi tải dữ liệu!";
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogError("Lỗi kết nối Firebase: " + request.error);
+                if (leaderboardText != null)
+                {
+                    leaderboardText.text = "Lỗi kết nối!";
+                }
+            }
+        }
+    }
+}
