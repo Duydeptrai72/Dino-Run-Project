@@ -398,3 +398,203 @@ public class GameManager : MonoBehaviour
     public void HideMainMenuConfirmationDialog()
     {
         mainMenuConfirmationDialog.SetActive(false);
+        pauseMenu.SetActive(true);
+    }
+    
+    public void ConfirmMainMenu()
+    {
+        // shouldSaveScore removed
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+    
+    public void CancelMainMenu()
+    {
+        HideMainMenuConfirmationDialog();
+    }
+    
+    public void ShowLeaderboard()
+    {
+        leaderboardPanel.SetActive(true);
+        gameStartMess.SetActive(false);
+        //resetButton.SetActive(false);
+        exitButton.SetActive(false);
+        leaderboardCloseButton.SetActive(true);
+        //muteButton.SetActive(false);
+        DisplayLeaderboard();
+    }
+    
+    public void HideLeaderboard()
+    {
+        leaderboardPanel.SetActive(false);
+        gameStartMess.SetActive(true);
+        //resetButton.SetActive(true);
+        exitButton.SetActive(true);
+        leaderboardCloseButton.SetActive(false);
+        //muteButton.SetActive(true);
+        
+        // Clean up leaderboard entries immediately
+        if (leaderboardContent != null)
+        {
+            Debug.Log($"Cleaning up {leaderboardContent.transform.childCount} leaderboard entries");
+            
+            // Destroy all child objects immediately
+            while (leaderboardContent.transform.childCount > 0)
+            {
+                Transform child = leaderboardContent.transform.GetChild(0);
+                DestroyImmediate(child.gameObject);
+            }
+            
+            Debug.Log($"Cleanup complete. Remaining children: {leaderboardContent.transform.childCount}");
+        }
+        else
+        {
+            Debug.LogError("LeaderboardContent is null during cleanup!");
+        }
+    }
+    
+    private void LoadLeaderboard()
+    {
+        string leaderboardData = PlayerPrefs.GetString("Leaderboard", "");
+        if (string.IsNullOrEmpty(leaderboardData))
+        {
+            leaderboard = new List<LeaderboardEntry>();
+        }
+        else
+        {
+            try
+            {
+                leaderboard = JsonUtility.FromJson<List<LeaderboardEntry>>(leaderboardData);
+                if (leaderboard == null)
+                {
+                    leaderboard = new List<LeaderboardEntry>();
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError("Failed to load leaderboard: " + e.Message);
+                leaderboard = new List<LeaderboardEntry>();
+            }
+        }
+    }
+    
+    private void SaveLeaderboard()
+    {
+        string leaderboardData = JsonUtility.ToJson(leaderboard);
+        PlayerPrefs.SetString("Leaderboard", leaderboardData);
+        PlayerPrefs.Save();
+    }
+    
+    private void AddToLeaderboard(float scoreValue)
+    {
+        string currentDate = System.DateTime.Now.ToString("MM/dd/yyyy");
+        LeaderboardEntry newEntry = new LeaderboardEntry
+        {
+            score = Mathf.FloorToInt(scoreValue).ToString(),
+            date = currentDate
+        };
+        
+        leaderboard.Add(newEntry);
+        leaderboard.Sort((a, b) => int.Parse(b.score).CompareTo(int.Parse(a.score)));
+        
+        if (leaderboard.Count > MAX_LEADERBOARD_ENTRIES)
+        {
+            leaderboard = leaderboard.GetRange(0, MAX_LEADERBOARD_ENTRIES);
+        }
+        
+        SaveLeaderboard();
+    }
+    
+    private void DisplayLeaderboard()
+    {
+        if (leaderboardContent == null)
+        {
+            Debug.LogError("LeaderboardContent is not assigned in Inspector!");
+            return;
+        }
+        
+        if (leaderboardEntryPrefab == null)
+        {
+            Debug.LogError("LeaderboardEntryPrefab is not assigned in Inspector!");
+            return;
+        }
+        
+        // Check prefab structure
+        TextMeshProUGUI[] prefabTexts = leaderboardEntryPrefab.GetComponentsInChildren<TextMeshProUGUI>();
+        Debug.Log($"LeaderboardEntryPrefab has {prefabTexts.Length} TextMeshProUGUI components");
+        
+        // Clean up existing entries
+        foreach (Transform child in leaderboardContent.transform)
+        {
+            Destroy(child.gameObject);
+        }
+        
+        // Reset content size
+        RectTransform contentRect = leaderboardContent.GetComponent<RectTransform>();
+        if (contentRect != null)
+        {
+            contentRect.anchoredPosition = Vector2.zero;
+        }
+        
+        for (int i = 0; i < leaderboard.Count; i++)
+        {
+            if (leaderboard[i] == null)
+            {
+                Debug.LogError($"Leaderboard entry at index {i} is null!");
+                continue;
+            }
+            
+            GameObject entry = Instantiate(leaderboardEntryPrefab, leaderboardContent.transform);
+            if (entry == null)
+            {
+                Debug.LogError($"Failed to instantiate leaderboard entry prefab at index {i}!");
+                continue;
+            }
+            
+            // Position the entry properly within the content
+            RectTransform entryRect = entry.GetComponent<RectTransform>();
+            if (entryRect != null)
+            {
+                entryRect.anchoredPosition = new Vector2(0, -i * 50); // Position each entry 50 units down
+                entryRect.anchorMin = new Vector2(0, 1); // Anchor to top-left
+                entryRect.anchorMax = new Vector2(1, 1);
+                entryRect.pivot = new Vector2(0, 1);
+                entryRect.sizeDelta = new Vector2(0, 40); // Height of 40, width fills content
+            }
+            
+            TextMeshProUGUI[] texts = entry.GetComponentsInChildren<TextMeshProUGUI>();
+            Debug.Log($"Entry {i} has {texts.Length} TextMeshProUGUI components");
+            
+            if (texts.Length >= 2)
+            {
+                if (texts[0] != null)
+                {
+                    texts[0].text = (i + 1).ToString() + ".";
+                    Debug.Log($"Set rank text: {(i + 1).ToString() + "."}");
+                }
+                if (texts[1] != null)
+                {
+                    texts[1].text = leaderboard[i].score + " - " + leaderboard[i].date;
+                    Debug.Log($"Set score+date text: {leaderboard[i].score + " - " + leaderboard[i].date}");
+                }
+            }
+            else
+            {
+                Debug.LogError($"Leaderboard entry prefab needs at least 2 TextMeshProUGUI components! Found: {texts.Length}");
+                
+                // Try to find any text components and show what we found
+                if (texts.Length == 1)
+                {
+                    Debug.LogError("Only 1 TextMeshProUGUI found. Need 2: one for rank, one for score+date");
+                }
+                else
+                {
+                    Debug.LogError("No TextMeshProUGUI components found on prefab!");
+                }
+            }
+        }
+        
+        // Adjust content height based on number of entries
+        if (contentRect != null)
+        {
+            contentRect.sizeDelta = new Vector2(contentRect.sizeDelta.x, leaderboard.Count * 50);
